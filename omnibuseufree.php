@@ -478,7 +478,8 @@ class OmnibusEuFree extends Module
         $sql->where('is_last = 1');
         $SQLResult = Db::getInstance()->executeS($sql);
 
-        $ToChange = 0;
+        $CurrencyConversionRate['counter'] = 0;
+        $CurrencyConversionRate['currency'] = array();
         $OmnibusCurrencies = array();
 
         foreach ($SQLResult as $row) {
@@ -495,15 +496,16 @@ class OmnibusEuFree extends Module
 
             foreach ($AvailableCurrencies as $CurrencyKey => $CurrencyValue) {
                 if (!isset($OmnibusCurrencies[$CurrencyKey]) || $CurrencyValue != $OmnibusCurrencies[$CurrencyKey]) {
-                    $ToChange++;
+                    $CurrencyConversionRate['counter']++;
+                    $CurrencyConversionRate['currency'][$CurrencyKey] = true;
                 }
             }
         } 
         else {
-            $ToChange++;
+            $CurrencyConversionRate['counter']++;
         }
 
-        return $ToChange == 0 ? false : true;
+        return $CurrencyConversionRate;
     }
 
     protected function addProductPrice($id_product = null)
@@ -519,31 +521,19 @@ class OmnibusEuFree extends Module
             $omnibus_price = array();
             $omnibus_price = $this->getLastPrice($id_product, 0);
 
-            $check_currency = $this->checkCurrencyConversionRate($id_product, 0);
+            $checkCurrencyConversionRate = $this->checkCurrencyConversionRate($id_product, 0);
 
-            if (empty($omnibus_price) || $product_price != $omnibus_price[0]['price'] || (bool) $check_currency == true) {
-                $this->clearLastPrice($id_product);
+            if (empty($omnibus_price) || $product_price != $omnibus_price[0]['price'] || $checkCurrencyConversionRate['counter'] > 0) {
                 $currencies = Currency::getCurrencies();
                 $defaultCurrency = Currency::getDefaultCurrency();
-
-                foreach ($currencies as $currency) {
-                    if ($currency['id_currency'] == $defaultCurrency->id) {
-                        $isDefaultCurrency = 1;
-                        $product_price_currency = $product_price;
-                    } 
-                    else {
-                        $isDefaultCurrency = 0;
-                        $product_price_currency = Tools::convertPrice($product_price, $currency);
-                    }
-
-                    $this->insertToOmnibusTable($id_product, 0, $product_price_currency, $currency['id_currency'], $isDefaultCurrency, $currency['conversion_rate']);
-                }
+                $this->addProductPricePerCurrency($id_product, 0, $product_price, $omnibus_price, $checkCurrencyConversionRate, $currencies, $defaultCurrency);
             }
         }
     }
 
     protected function addProductPriceWithCombinations($id_product = null)
     {
+
         if (!isset($id_product)) {
             throw new Exception('Missing parameter: $id_product');
         }
@@ -562,23 +552,33 @@ class OmnibusEuFree extends Module
                     $omnibus_price = array();
                     $omnibus_price = $this->getLastPrice($id_product, $combination['id_product_attribute']);
 
-                    $check_currency = $this->checkCurrencyConversionRate($id_product, $combination['id_product_attribute']);
+                    $checkCurrencyConversionRate = $this->checkCurrencyConversionRate($id_product, $combination['id_product_attribute']);
 
-                    if (empty($omnibus_price) || $product_price != $omnibus_price[0]['price'] || (bool) $check_currency == true) {
-                        $this->clearLastPrice($id_product, $combination['id_product_attribute']);
+                    if (empty($omnibus_price) || $product_price != $omnibus_price[0]['price'] || $checkCurrencyConversionRate['counter'] > 0) {
+                        $this->addProductPricePerCurrency($id_product, $combination['id_product_attribute'], $product_price, $omnibus_price, $checkCurrencyConversionRate, $currencies, $defaultCurrency);
+                    }
+                }
+            }
+        }
+    }
 
-                        foreach ($currencies as $currency) {
-                            if ($currency['id_currency'] == $defaultCurrency->id) {
-                                $isDefaultCurrency = 1;
-                                $product_price_currency = $product_price;
-                            } 
-                            else {
-                                $isDefaultCurrency = 0;
-                                $product_price_currency = Tools::convertPrice($product_price, $currency);
-                            }
-
-                            $this->insertToOmnibusTable($id_product, $combination['id_product_attribute'], $product_price_currency, $currency['id_currency'], $isDefaultCurrency, $currency['conversion_rate']);
-                        }
+    protected function addProductPricePerCurrency ($id_product = null, $id_product_attribute = 0, $product_price, $omnibus_price, $currency_conversion_rate, $currencies, $defaultCurrency) {
+        if (!isset($id_product)) {
+            throw new Exception('Missing parameter: $id_product');
+        }
+        
+        foreach ($currencies as $currency) {
+            if ($currency['id_currency'] == $defaultCurrency->id) {
+                if (empty($omnibus_price) || $product_price != $omnibus_price[0]['price'] || isset($currency_conversion_rate['currency'][$currency['id_currency']])) {
+                    if ($this->clearLastPrice($id_product, $id_product_attribute, $currency['id_currency'])) {
+                        $this->insertToOmnibusTable($id_product, $id_product_attribute, $product_price, $currency['id_currency'], 1, $currency['conversion_rate']);
+                    }
+                }
+            }
+            else {
+                if (empty($omnibus_price) || $product_price != $omnibus_price[0]['price'] || isset($currency_conversion_rate['currency'][$currency['id_currency']])) {
+                    if ($this->clearLastPrice($id_product, $id_product_attribute, $currency['id_currency'])) {
+                        $this->insertToOmnibusTable($id_product, $id_product_attribute, Tools::convertPrice($product_price, $currency), $currency['id_currency'], 0, $currency['conversion_rate']);
                     }
                 }
             }
@@ -630,11 +630,11 @@ class OmnibusEuFree extends Module
         return Db::getInstance()->executeS($sql);
     }
 
-    protected function clearLastPrice($id_product = 0, $id_product_attribute = 0)
+    protected function clearLastPrice($id_product = 0, $id_product_attribute = 0, $id_currency = 0)
     {
-        $result = Db::getInstance()->update('omnibus_eu_free', array(
+        return $result = Db::getInstance()->update('omnibus_eu_free', array(
             'is_last' => 0,
-        ), 'id_product = ' . (int) $id_product . ' AND id_product_attribute = ' . (int) $id_product_attribute);
+        ), 'id_product = ' . (int) $id_product . ' AND id_product_attribute = ' . (int) $id_product_attribute . ' AND id_currency = ' . (int) $id_currency) ;
     }
 
     public function insertAllProductsToOmnibusTable()
