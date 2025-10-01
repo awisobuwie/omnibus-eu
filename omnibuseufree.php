@@ -52,7 +52,7 @@ class OmnibusEuFree extends Module
         include(dirname(__FILE__) . '/sql/install.php');
 
         return parent::install() &&
-            $this->registerHook('header') &&
+            $this->registerHook('displayHeader') &&
             $this->registerHook('displayBackOfficeHeader') &&
             $this->registerHook('actionProductSave') &&
             $this->registerHook('actionProductAttributeUpdate') &&
@@ -166,7 +166,7 @@ class OmnibusEuFree extends Module
             'OmnibuseufreeNumberOfDays' => (int) Configuration::get('OMNIBUSEUFREE_DAYS', null, null, null, 30),
         ]);
 
-        return $this->display(__FILE__, '/views/templates/hook/presta_studio_omnibus_price.tpl');
+        return $this->context->smarty->fetch($this->local_path . '/views/templates/hook/presta_studio_omnibus_price.tpl');
     }
 
     public function hookDisplayProductPriceBlock($params)
@@ -207,10 +207,10 @@ class OmnibusEuFree extends Module
             'OmnibuseufreeData' => $OmnibusData
         ]);
 
-        return $this->display(__FILE__, '/views/templates/admin/products-price-list.tpl');
+        return $this->context->smarty->fetch($this->local_path . '/views/templates/admin/products-price-list.tpl');
     }
 
-    public function hookHeader()
+    public function hookDisplayHeader()
     {
         $this->context->controller->addCSS($this->_path . '/views/css/omnibuseufree-presta-studio.css');
     }
