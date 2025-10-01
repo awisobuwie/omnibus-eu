@@ -27,7 +27,7 @@ class OmnibusEuFree extends Module
     {
         $this->name = 'omnibuseufree';
         $this->tab = 'pricing_promotion';
-        $this->version = '1.0.2';
+        $this->version = '1.0.2 aw';
         $this->author = 'presta.studio';
         $this->need_instance = 1;
         $this->bootstrap = true;
