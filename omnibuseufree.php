@@ -562,7 +562,7 @@ class OmnibusEuFree extends Module
         }
     }
 
-    protected function addProductPricePerCurrency ($id_product, $id_product_attribute, $product_price, $omnibus_price, $currency_conversion_rate, $currencies, $defaultCurrency) {
+    protected function addProductPricePerCurrency($id_product, $id_product_attribute, $product_price, $omnibus_price, $currency_conversion_rate, $currencies, $defaultCurrency) {
         if (!isset($id_product)) {
             throw new Exception('Missing parameter: $id_product');
         }
